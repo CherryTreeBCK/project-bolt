@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { supabase } from '../lib/supabaseClient.js'; // Adjust path as needed
+import { supabase } from '../src/lib/supabaseClient.js'; // Adjust path as needed
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

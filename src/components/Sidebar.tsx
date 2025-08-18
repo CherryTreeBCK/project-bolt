@@ -6,8 +6,9 @@ import {
   MessageSquare, 
   Users, 
   BarChart3,
-  UserPlus
+  Settings
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface SidebarProps {
   activeTab: string;
@@ -17,19 +18,23 @@ interface SidebarProps {
 const navigation = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'followers', label: 'Instagram Followers', icon: Users2 },
-    { id: 'contacts', label: 'Contacts', icon: Users },
+  { id: 'contacts', label: 'Contacts', icon: Users },
   { id: 'communication', label: 'Communication', icon: MessageSquare },
-
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
 export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="w-64 min-w-64 bg-white border-r border-gray-200 p-4 flex-shrink-0">
       <div className="mb-6">
-        <Button className="w-full bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600">
-          <UserPlus className="h-4 w-4 mr-2" />
-          Add Follower
+        <Button
+          onClick={() => navigate('/admin')}
+          className="w-full bg-gradient-to-r from-pink-500 to-red-500 hover:from-pink-600 hover:to-red-600"
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Admin Page
         </Button>
       </div>
       

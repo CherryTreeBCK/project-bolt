@@ -26,5 +26,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "src/utils/csvLoader.ts", "server/aiSorting.js", "server/index.js", "server/main.js", "server/runExport.js", "server/saveCsv.js"]
 }

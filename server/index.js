@@ -2,9 +2,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import axios from 'axios';
-import { supabase } from '../lib/supabaseClient.js';
+import { supabase } from '../src/lib/supabaseClient.js';
 
-const USER_ID = 'banannycollective';
+const USER_ID = 'goldengategymnastics';
 
 async function addFollowersToDB(followersBatch, tableName) {
   try {
@@ -17,7 +17,6 @@ async function addFollowersToDB(followersBatch, tableName) {
     id: follower.id || ''   
     }));
 
-    // Insert into Supabase table 'followers'
     const { data, error } = await supabase
       .from(tableName)
       .insert(values);
@@ -198,7 +197,7 @@ getSelfProfileData();
 
 
 // Fetch Instagram followers with pagination
-async function saveAllBasicFollowerDataToDB(username, maxPages = 10) {
+async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCallback) {
     const allFollowers = [];
     let paginationToken = null;
     let pageCount = 0;
@@ -228,10 +227,17 @@ async function saveAllBasicFollowerDataToDB(username, maxPages = 10) {
                 allFollowers.push(...followers);
                 
                 // Save followers to the main sheet in batches
-                const batchSize = 1;
+                const batchSize = 25;
                 for (let i = 0; i < followers.length; i += batchSize) {
                     const batch = followers.slice(i, i + batchSize);
                     await addFollowersToDB(batch, 'followers_duplicate');
+
+                    progressCallback?.({
+                        status: `Getting follower ${i} of ${allFollowers.length}`,
+                        progress: i / allFollowers.length,
+                        current: i,
+                        total: allFollowers.length,
+                    });
                     
                     // Small delay between batches
                     if (i + batchSize < followers.length) {
@@ -329,7 +335,7 @@ async function getAllFollowers(username, maxPages = 10) {
 }
 
 // Main execution function
-async function main() {
+async function main(progressCallback) {
     console.log('🚀 Starting Instagram Followers to Supabase');
     
     // Check if API key is configured
@@ -343,7 +349,7 @@ async function main() {
         // Fetch all followers with pagination and save to db
         console.log(`📱 Fetching followers for: ${USER_ID}`);
         const maxPages = parseInt(process.env.MAX_PAGES) || 5; // Default to 5 pages
-        const followers = await saveAllBasicFollowerDataToDB(USER_ID, maxPages);
+        const followers = await saveAllBasicFollowerDataToDB(USER_ID, maxPages, progressCallback);
 
         if (followers.length === 0) {
             console.log('ℹ️  No followers found or user may be private');
@@ -351,8 +357,6 @@ async function main() {
         }
 
         console.log(`\n🎉 Successfully processed ${followers.length} followers!`);
-        console.log(`📋 Main sheet: Individual followers data`);
-        console.log(`📋 "follower pages" sheet: API call responses`);
 
     } catch (error) {
         console.error('❌ Application error:', error.message);
@@ -386,7 +390,7 @@ async function testFollowersAPI() {
 }
 
 // Enrich existing followers with detailed profile data
-async function enrichProfileData() {
+async function enrichProfileData(progressCallback) {
     console.log('🔍 Starting profile data enrichment for existing followers...');
     
     // Check if API key is configured
@@ -399,7 +403,6 @@ async function enrichProfileData() {
     try {
         console.log('📖 Reading followers from Supabase where follower_count is missing...');
 
-        // 1. Fetch followers where follower_count is null
         const { data: followers, error } = await supabase
             .from('followers_duplicate')
             .select('*')
@@ -415,7 +418,6 @@ async function enrichProfileData() {
             return;
         }
 
-        // 2. Filter out users marked as "not_found" (in profile_json)
         const followersToProcess = followers.filter(f => {
             try {
             const profileJson = f.profile_json;
@@ -423,7 +425,7 @@ async function enrichProfileData() {
             const parsed = JSON.parse(profileJson);
             return parsed.status !== 'not_found';
             } catch {
-            return true; // Malformed or missing JSON → process it
+            return true;
             }
         });
 
@@ -454,6 +456,13 @@ async function enrichProfileData() {
                     await addProfileDataToTable(username, profileData, 'followers_duplicate');
                     processedCount++;
                     console.log(`✅ Enriched ${username} with profile data (${processedCount}/${followersToActuallyProcess.length})`);
+
+                    progressCallback?.({
+                        status: `Enriching profile ${processedCount} of ${followersToActuallyProcess.length}`,
+                        progress: processedCount / followersToActuallyProcess.length,
+                        current: processedCount,
+                        total: followersToActuallyProcess.length,
+                    });
                 } else if (profileData && (profileData.detail === 'Not found' || (profileData.error && profileData.error.includes('Not found')))) {
                     // User was deleted/not found - save marker so we don't try again
                     const notFoundMarker = {

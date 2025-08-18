@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { supabase } from '../lib/supabaseClient.js';
+import { supabase } from '../src/lib/supabaseClient.js';
 import { Parser } from 'json2csv';
 import OpenAI from 'openai';
 import { parse } from 'csv-parse/sync';
@@ -92,7 +92,7 @@ Here is the data to classify:
 ${csvSubset}
 `;
 
-async function classifyFollowers() {
+async function classifyFollowers(progressCallback) {
   const { data, error } = await supabase
     .from('followers_duplicate')
     .select('*');
@@ -148,6 +148,13 @@ async function classifyFollowers() {
           console.log(`✅ Updated id ${id}: category=${category}, priority=${priority}`);
         }
       }
+
+      progressCallback?.({
+        status: `Fetching followers page ${start} of ${total}`,
+        progress: start / total,
+        current: start,
+        total: total,
+      });
 
       console.log(`✅ Block ${start}–${end} classified and updated.`);
     } catch (error) {

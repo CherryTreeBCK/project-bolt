@@ -9,6 +9,8 @@ function AdminPage() {
   const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [file, setFile] = useState(null);
+  const [progress, setProgress] = useState(0);   
+  const [statusText, setStatusText] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const navigate = useNavigate();
@@ -52,41 +54,38 @@ function AdminPage() {
     }
   };
 
-  const handleUpload = async () => {
-    if (!selectedAccount || !file) {
-      setMessage({ type: 'error', text: 'Please select an account and upload a CSV file' });
-      return;
-    }
-
+const handleUpload = async () => {
     setLoading(true);
-    setMessage(null);
+    setProgress(0);
+    setStatusText("Starting...");
 
-    try {
-      // Upsert the account
-      await upsertAccount({
-        id: selectedAccount.id,
-        username: selectedAccount.username,
-        full_name: selectedAccount.full_name,
-        profile_image_url: selectedAccount.profile_image_url
-      });
+    const eventSource = new EventSource("http://localhost:3001/api/progress");
 
-      // Import followers
-      const importedCount = await importFollowers(selectedAccount.id, file);
-      
-      setMessage({ 
-        type: 'success', 
-        text: `Successfully imported ${importedCount} followers for @${selectedAccount.username}` 
-      });
-      
-      setFile(null);
-      loadAccounts();
-    } catch (error) {
-      console.error('Import error:', error);
-      setMessage({ type: 'error', text: 'Failed to import followers. Please check your CSV format.' });
-    } finally {
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setStatusText(data.status || "");
+      setProgress(data.progress || 0);
+
+      if (data.done) {
+        setLoading(false);
+        eventSource.close();
+      }
+
+      if (data.error) {
+        setLoading(false);
+        eventSource.close();
+        alert("Error: " + data.status);
+      }
+    };
+
+    eventSource.onerror = () => {
       setLoading(false);
-    }
+      eventSource.close();
+      alert("Connection lost");
+    };
   };
+
+
 
   const navigateBack = () => {
     navigate('/');
@@ -113,39 +112,14 @@ function AdminPage() {
 
           {/* CSV Upload */}
           <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Upload Followers CSV</h2>
-            
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-purple-400 transition-colors duration-200">
-              <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <div className="mb-4">
-                <label
-                  htmlFor="csv-upload"
-                  className="cursor-pointer bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors duration-200 inline-block"
-                >
-                  Choose CSV File
-                </label>
-                <input
-                  id="csv-upload"
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </div>
-              {file && (
-                <p className="text-sm text-gray-600 mb-4">
-                  Selected: {file.name}
-                </p>
-              )}
-              <p className="text-sm text-gray-500">
-                Upload a CSV file with your Instagram followers data
-              </p>
-            </div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              Upload Followers CSV
+            </h2>
 
             <button
               onClick={handleUpload}
-              disabled={!selectedAccount || !file || loading}
-              className="w-full mt-6 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+              disabled={loading}
+              className={`w-full mt-6 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center`}
             >
               {loading ? (
                 <>
@@ -154,11 +128,21 @@ function AdminPage() {
                 </>
               ) : (
                 <>
-                  <Upload className="h-5 w-5 mr-2" />
                   Import Followers
                 </>
               )}
             </button>
+
+            {/* Progress bar */}
+            <div className="w-full bg-gray-200 rounded-full h-4 mt-4 overflow-hidden">
+              <div
+                className="bg-green-600 h-4 transition-all duration-300"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+
+            {/* Status text */}
+            <p className="mt-2 text-gray-700 text-sm">{statusText}</p>
           </div>
         </div>
 
@@ -204,6 +188,14 @@ function AdminPage() {
               <li><strong>profile image url</strong> - Profile picture URL (optional)</li>
             </ul>
           </div>
+        </div>
+          <div className="mt-8">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 text-lg rounded-lg shadow-lg hover:from-blue-600 hover:to-indigo-700 transition-colors duration-200"
+          >
+            Go to Dashboard
+          </button>
         </div>
       </div>
     </div>
