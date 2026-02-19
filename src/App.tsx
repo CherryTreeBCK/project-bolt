@@ -2,9 +2,6 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dashboard } from './components/Dashboard';
 import { FollowersView } from './components/FollowersView';
-import { CommunicationView } from './components/CommunicationView';
-import { ContactsView } from './components/ContactsView';
-import { AnalyticsView } from './components/AnalyticsView';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Toaster } from '@/components/ui/sonner';
@@ -25,15 +22,6 @@ function App() {
             </TabsContent>
             <TabsContent value="followers" className="mt-0">
               <FollowersView />
-            </TabsContent>
-            <TabsContent value="communication" className="mt-0">
-              <CommunicationView />
-            </TabsContent>
-            <TabsContent value="contacts" className="mt-0">
-              <ContactsView />
-            </TabsContent>
-            <TabsContent value="analytics" className="mt-0">
-              <AnalyticsView />
             </TabsContent>
           </Tabs>
         </main>

@@ -1,4 +1,4 @@
-import { exportTableToCSV } from './saveCsv.js'; // adjust path if needed
+import { exportTableToCSV } from './saveCsv.js';
 
 exportTableToCSV().catch(err => {
   console.error('❌ Error exporting followers:', err);

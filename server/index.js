@@ -4,41 +4,46 @@ dotenv.config();
 import axios from 'axios';
 import { supabase } from '../src/lib/supabaseClient.js';
 
-const USER_ID = 'goldengategymnastics';
+let USER_ID = '';
 
-async function addFollowersToDB(followersBatch, tableName) {
+
+async function addFollowersToDB(followersBatch, tableName, ownerAccount) {
   try {
-    if (!followersBatch || followersBatch.length === 0) return;
+    if (!followersBatch || followersBatch.length === 0) return [];
 
-    // Map followers to objects matching your Supabase table columns
     const values = followersBatch.map(follower => ({
-    username: follower.username || '',
-    full_name: follower.full_name || '',
-    id: follower.id || ''   
+      id: follower.id ?? null,
+      owner_account: ownerAccount ?? null,
+      username: follower.username ?? '',
+      full_name: follower.full_name ?? '',
+      follower_count: follower.follower_count ?? null,
+      following_count: follower.following_count ?? null,
+      posts_count: follower.posts_count ?? null,
+      is_verified: !!follower.is_verified,
+      is_private: !!follower.is_private,
+      biography: follower.biography ?? null,
+      external_url: follower.external_url ?? null,
+      category: follower.category ?? null,
+      created_at: new Date().toISOString()
     }));
 
     const { data, error } = await supabase
       .from(tableName)
-      .insert(values);
+      .upsert(values, { onConflict: ['id', 'owner_account'] });
 
     if (error) {
-        console.error('❌ Error inserting into Supabase:', error.message);
-        throw error;
+      console.error('❌ Error inserting/upserting into Supabase:', error);
+      throw error;
     }
 
-    if (!data) {
-        console.error('❌ Insert returned no data');
-        return;
-    }
-
-    console.log(`✅ Successfully inserted ${data.length} followers into Supabase.`);
-
-  } catch (error) {
-    console.error('Error adding followers to DB:', error.message);
-    throw error;
+    const resultArray = Array.isArray(data) ? data : (data ? [data] : []);
+    console.log(`✅ Upserted ${resultArray.length} rows for owner=${ownerAccount}`);
+    return resultArray;
+  } catch (err) {
+    console.error('Error in addFollowersToDB:', err);
+    throw err;
   }
 }
-
 async function addProfileDataToTable(username, profileData, tableName) {
   try {
     if (!username) throw new Error('Missing username to update profile data.');
@@ -50,7 +55,7 @@ async function addProfileDataToTable(username, profileData, tableName) {
       is_verified: profileData.data.is_verified || false,
       is_private: profileData.data.is_private || false,
       biography: profileData.data.biography || '',
-      external_url: profileData.data.external_url || ''
+      external_url: profileData.data.external_url || '',
     };
 
     const { data, error } = await supabase
@@ -171,33 +176,10 @@ async function addApiResponseToSheet(sheets, spreadsheetId, requestNumber, respo
     }
 }
 
-async function getSelfProfileData() {
-  try {
-    const profileData = await getUserProfileData(USER_ID);
-
-    // Use profileData.data for the actual profile info
-    if (!profileData.data.id) {
-      const selfAsFollower = [{
-        username: profileData.data.username || '',
-        full_name: profileData.data.full_name || '',
-        id: profileData.data.id || ''
-      }];
-
-      await addFollowersToDB(selfAsFollower, 'account_info');
-    }
-
-    await addProfileDataToTable(USER_ID, profileData, 'account_info');
-  } catch (error) {
-    console.error("❌ Failed to fetch self profile data:", error.message);
-  }
-}
-
-
-getSelfProfileData();
-
-
 // Fetch Instagram followers with pagination
-async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCallback) {
+const MAX_FOLLOWERS = parseInt(process.env.MAX_IMPORT_FOLLOWERS || '100', 10);
+
+async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCallback, ownerAccount) {
     const allFollowers = [];
     let paginationToken = null;
     let pageCount = 0;
@@ -205,7 +187,7 @@ async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCal
     try {
         do {
             console.log(`📄 Fetching page ${pageCount + 1}${paginationToken ? ` (token: ...${paginationToken.slice(-20)})` : ''}`);
-            
+
             const options = {
                 method: 'GET',
                 url: 'https://instagram-scraper-api2.p.rapidapi.com/v1/followers',
@@ -221,31 +203,45 @@ async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCal
 
             const response = await axios.request(options);
             const data = response.data;
-            
-            if (data.data && data.data.items) {
-                const followers = data.data.items;
+
+            if (data.data && data.data.items && allFollowers.length < MAX_FOLLOWERS) {
+                const beforeCount = allFollowers.length;
+
+                const remainingAllowed = MAX_FOLLOWERS - beforeCount;
+                let followers = data.data.items;
+
+                if (followers.length > remainingAllowed) {
+                    followers = followers.slice(0, remainingAllowed);
+                }
+
                 allFollowers.push(...followers);
-                
+
                 // Save followers to the main sheet in batches
                 const batchSize = 25;
                 for (let i = 0; i < followers.length; i += batchSize) {
                     const batch = followers.slice(i, i + batchSize);
-                    await addFollowersToDB(batch, 'followers_duplicate');
+                    await addFollowersToDB(batch, 'followers_duplicate_new', ownerAccount);
 
+                    const overallCurrent = beforeCount + i + batch.length;
                     progressCallback?.({
-                        status: `Getting follower ${i} of ${allFollowers.length}`,
-                        progress: i / allFollowers.length,
-                        current: i,
-                        total: allFollowers.length,
+                        status: `Processed ${overallCurrent} of ${MAX_FOLLOWERS} followers`,
+                        progress: overallCurrent / MAX_FOLLOWERS,
+                        current: overallCurrent,
+                        total: MAX_FOLLOWERS,
                     });
-                    
+
                     // Small delay between batches
                     if (i + batchSize < followers.length) {
                         await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 }
-                
+
                 console.log(`✅ Fetched ${followers.length} followers (total: ${allFollowers.length})`);
+            }
+
+            if (allFollowers.length >= MAX_FOLLOWERS) {
+                console.log(`Reached MAX_FOLLOWERS limit (${MAX_FOLLOWERS})`);
+                break;
             }
 
             // Get pagination token for next page
@@ -254,7 +250,7 @@ async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCal
 
             // Add a delay to avoid rate limiting
             if (paginationToken && pageCount <= maxPages) {
-                console.log('⏳ Waiting 0.33 seconds before next request...'); 
+                console.log('⏳ Waiting 0.33 seconds before next request...');
                 await new Promise(resolve => setTimeout(resolve, 300));
             }
 
@@ -274,6 +270,7 @@ async function saveAllBasicFollowerDataToDB(username, maxPages = 10, progressCal
         throw error;
     }
 }
+
 
 // Original function for testing without sheets
 async function getAllFollowers(username, maxPages = 10) {
@@ -335,7 +332,7 @@ async function getAllFollowers(username, maxPages = 10) {
 }
 
 // Main execution function
-async function main(progressCallback) {
+async function main(progressCallback, ownerAccount) {
     console.log('🚀 Starting Instagram Followers to Supabase');
     
     // Check if API key is configured
@@ -347,9 +344,10 @@ async function main(progressCallback) {
 
     try {
         // Fetch all followers with pagination and save to db
+        USER_ID = ownerAccount;
         console.log(`📱 Fetching followers for: ${USER_ID}`);
         const maxPages = parseInt(process.env.MAX_PAGES) || 5; // Default to 5 pages
-        const followers = await saveAllBasicFollowerDataToDB(USER_ID, maxPages, progressCallback);
+        const followers = await saveAllBasicFollowerDataToDB(USER_ID, maxPages, progressCallback, ownerAccount);
 
         if (followers.length === 0) {
             console.log('ℹ️  No followers found or user may be private');
@@ -404,7 +402,7 @@ async function enrichProfileData(progressCallback) {
         console.log('📖 Reading followers from Supabase where follower_count is missing...');
 
         const { data: followers, error } = await supabase
-            .from('followers_duplicate')
+            .from('followers_duplicate_new')
             .select('*')
             .is('follower_count', null) // Only those missing follower_count
 
@@ -453,7 +451,7 @@ async function enrichProfileData(progressCallback) {
                 
                 if (profileData && profileData.data && !profileData.error) {
                     // Update the row with profile data in columns E-L
-                    await addProfileDataToTable(username, profileData, 'followers_duplicate');
+                    await addProfileDataToTable(username, profileData, 'followers_duplicate_new');
                     processedCount++;
                     console.log(`✅ Enriched ${username} with profile data (${processedCount}/${followersToActuallyProcess.length})`);
 
@@ -703,7 +701,6 @@ async function addMetadataToSheet(sheets, spreadsheetId, username, metadata, sta
             user.is_private || false,
             user.biography || '',
             user.external_url || '',
-            user.profile_pic_url || '',
             user.category || '',
             JSON.stringify(metadata)
         ]];
@@ -788,5 +785,4 @@ export {
   setupMetadataSheet,
   addMetadataToSheet,
   main,
-  getSelfProfileData
 };

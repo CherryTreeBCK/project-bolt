@@ -4,9 +4,12 @@ import { Settings } from 'lucide-react';
 import { initDB } from './db/supabase-db.js';
 import AuthWrapper from './components/AuthWrapper.jsx';
 import AdminPage from './pages/AdminPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 import FollowersPage from './pages/FollowersPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import { DashboardLayout } from './components/DashboardLayout';
+import FollowerView from './components/followerView.tsx';
+import Signup from "./pages/Signup";
 
 
 function App() {
@@ -67,6 +70,15 @@ function App() {
 
 return (
   <Routes>
+    <Route path="/signup" element={<Signup />} />
+    <Route
+      path="/followerView/:username"
+      element={
+        <AuthWrapper>
+          <FollowerView />
+        </AuthWrapper>
+      }
+    />
     <Route
       path="/admin"
       element={
@@ -75,19 +87,19 @@ return (
         </AuthWrapper>
       }
     />
+        <Route
+      path="/settings"
+      element={
+        <AuthWrapper>
+          <SettingsPage />
+        </AuthWrapper>
+      }
+    />
     <Route
       path="/followers"
       element={
         <AuthWrapper>
           <FollowersPage />
-        </AuthWrapper>
-      }
-    />
-    <Route
-      path="/signup"
-      element={
-        <AuthWrapper>
-          <HomePage />
         </AuthWrapper>
       }
     />

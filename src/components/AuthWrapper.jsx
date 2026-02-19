@@ -1,8 +1,8 @@
+// src/components/AuthWrapper.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase.ts';
 import { LogIn, Mail, Lock, Instagram, Eye, EyeOff } from 'lucide-react';
-import { validateSignupToken, markTokenAsUsed } from '../db/supabase-db.js';
 
 function AuthWrapper({ children }) {
   const [session, setSession] = useState(null);
@@ -13,66 +13,67 @@ function AuthWrapper({ children }) {
   const [authLoading, setAuthLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [signupToken, setSignupToken] = useState(null);
+  // token/account info is read from localStorage (populated by Signup.jsx)
   const [tokenAccount, setTokenAccount] = useState(null);
+
   const navigate = useNavigate();
   const location = useLocation();
+  const tokenAccess = typeof window !== 'undefined' && localStorage.getItem("tokenAccess") === "true";
 
-  // Check if user is admin and redirect
+  // Keep session in sync
   useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session ?? null);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      setLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // If user is authenticated and is admin, redirect to admin
+  useEffect(() => {
+    if (!session) return;
+
     if (session?.user?.email === 'admin@instagramcrm.com') {
-      // Only redirect if not already on admin page
       if (location.pathname !== '/admin') {
         navigate('/admin');
       }
-    } else if (session?.user && location.pathname !== '/followers' && location.pathname !== '/admin') {
-      // Redirect non-admin users to followers page
-      //navigate('/followers');
+    } else {
+      // keep original behavior — no force-redirect for non-admin users
     }
   }, [session, navigate, location.pathname]);
 
+  // Read token/account info from localStorage on mount so guest token viewers are honored
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    // Check for signup token in URL
-    const urlParams = new URLSearchParams(location.search);
-    const token = urlParams.get('token');
-    
-    if (token && location.pathname === '/signup') {
-      validateToken(token);
-    }
-  }, [location.search, location.pathname]);
-
-  const validateToken = async (token) => {
     try {
-      const tokenData = await validateSignupToken(token);
-      if (tokenData) {
-        setSignupToken(token);
-        setTokenAccount(tokenData.accounts);
-        setAuthMode('signup');
+      const uuid = localStorage.getItem('accountUUID');
+      const username = localStorage.getItem('accountUsername');
+
+      if (username) {
+        setTokenAccount({ username });
+      } else if (uuid) {
+        setTokenAccount({ account_id: uuid });
       } else {
-        setError('Invalid or expired signup token');
+        setTokenAccount(null);
       }
-    } catch (error) {
-      setError('Error validating signup token');
+    } catch (e) {
+      console.warn('Could not read token info from localStorage', e);
+      setTokenAccount(null);
     }
-  };
+  }, []);
 
   const handleAuth = async (e) => {
     e.preventDefault();
@@ -92,23 +93,32 @@ function AuthWrapper({ children }) {
           password,
         });
         if (error) throw error;
-        
-        // Mark token as used if this was a token signup
-        if (signupToken) {
-          await markTokenAsUsed(signupToken);
-        }
-        
+
         setError('Check your email for the confirmation link!');
       }
-    } catch (error) {
-      setError(error.message);
+    } catch (err) {
+      setError(err.message || String(err));
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // clear local token-based guest access as well
+      try {
+        localStorage.removeItem('accountUUID');
+        localStorage.removeItem('accountUsername');
+        localStorage.removeItem('tokenAccess');
+      } catch (e) {
+        // ignore
+      }
+      setTokenAccount(null);
+      setSession(null);
+      navigate('/'); // go home
+    }
   };
 
   const fillAdminCredentials = () => {
@@ -116,6 +126,8 @@ function AuthWrapper({ children }) {
     setPassword('admin123456');
   };
 
+  // --- DECIDE: should we show login UI or render children as guest? ---
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
@@ -127,6 +139,49 @@ function AuthWrapper({ children }) {
     );
   }
 
+  // If not authenticated but tokenAccess exists and we have account info, allow guest view
+  const ownerFromStorage = (() => {
+    try {
+      return localStorage.getItem('accountUUID') || localStorage.getItem('accountUsername') || null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  if (!session && tokenAccess && ownerFromStorage) {
+    navigate('/dashboard');
+    return (
+      <div>
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between text-sm text-yellow-800">
+            <div>
+              Viewing dashboard as <strong>{tokenAccount?.username ?? ownerFromStorage}</strong>{' '}
+              | Sign in for full access.
+            </div>
+            <div>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.removeItem('accountUUID');
+                    localStorage.removeItem('accountUsername');
+                    localStorage.removeItem('tokenAccess');
+                  } catch (e) {}
+                  setTokenAccount(null);
+                  navigate('/');
+                }}
+                className="underline"
+              >
+                Sign in
+              </button>
+            </div>
+          </div>
+        </div>
+        {children}
+      </div>
+    );
+  }
+
+  // If no session and no tokenAccess/ownerFromStorage, show the sign-in/signup UI (original)
   if (!session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center px-4">
@@ -136,10 +191,9 @@ function AuthWrapper({ children }) {
               <Instagram className="h-12 w-12 text-purple-600 mx-auto mb-4" />
               <h1 className="text-2xl font-bold text-gray-900 mb-2">Instagram CRM</h1>
               <p className="text-gray-600">
-                {tokenAccount 
+                {tokenAccount
                   ? `Create account to access @${tokenAccount.username} data`
-                  : 'Sign in to manage your Instagram contacts'
-                }
+                  : 'Sign in to manage your Instagram contacts'}
               </p>
             </div>
 
@@ -221,22 +275,45 @@ function AuthWrapper({ children }) {
                   type="button"
                   onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
                   className="text-purple-600 hover:text-purple-800 text-sm transition-colors duration-200"
-                  disabled={!!signupToken}
+                  disabled={!!tokenAccount}
                 >
-                  {authMode === 'signin' 
-                    ? "Don't have an account? Sign up" 
-                    : "Already have an account? Sign in"
-                  }
+                  {authMode === 'signin'
+                    ? "Don't have an account? Sign up"
+                    : "Already have an account? Sign in"}
                 </button>
               </div>
             </form>
 
+            <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
+              <div>
+                <button onClick={fillAdminCredentials} className="underline">
+                  Fill admin credentials
+                </button>
+              </div>
+              <div>
+                <button
+                  onClick={() => {
+                    // clear any token-account state and remain on signup page
+                    try {
+                      localStorage.removeItem('accountUUID');
+                      localStorage.removeItem('accountUsername');
+                      localStorage.removeItem('tokenAccess');
+                    } catch (e) {}
+                    setTokenAccount(null);
+                  }}
+                  className="underline"
+                >
+                  Clear token
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
+  // Authenticated user: render header + children
   return (
     <div>
       {/* User info bar */}

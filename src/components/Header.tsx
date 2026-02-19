@@ -1,4 +1,4 @@
-import { Search, Bell, Settings, User } from 'lucide-react';
+import { Search, Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,12 +34,6 @@ export function Header() {
         </div>
 
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" className="relative bg-gray-50 hover:border hover:border-gray-300 hover:bg-gray-100">
-            <Bell className="h-5 w-5" />
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-red-500 text-white text-xs">
-              3
-            </Badge>
-          </Button>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

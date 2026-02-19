@@ -24,16 +24,14 @@ export interface FollowerData {
   verified: boolean;
   isPrivate: boolean;
   externalUrl?: string;
-  priority: string;
+  priority: number;
 }
 
 export async function loadFollowersFromCSV(): Promise<FollowerData[]> {
   try {
-    // 1. Fetch CSV text
-    const response = await fetch('/src/data/followers_duplicate.csv');
+    const response = await fetch('/src/data/followers_duplicate_new.csv');
     const csvText = await response.text();
 
-    // 2. Parse with PapaParse
     const { data: rows, errors } = Papa.parse<any>(csvText, {
       header: true,
       skipEmptyLines: true,
@@ -47,7 +45,6 @@ export async function loadFollowersFromCSV(): Promise<FollowerData[]> {
     }
 
     const followers: FollowerData[] = rows.map((row, i) => {
-      // === your existing JSON‑from‑followers extraction ===
       let profilePicUrl = '';
       try {
         let j = row['JSON from followers'] as string;
@@ -56,8 +53,6 @@ export async function loadFollowersFromCSV(): Promise<FollowerData[]> {
         }
         j = j.replace(/\\\\/g, '\\').replace(/\\"/g, '"');
         if (j.startsWith('{') && j.endsWith('}')) {
-          const js = JSON.parse(j);
-          profilePicUrl = js.profile_pic_url || '';
         }
       } catch {
         profilePicUrl = '';
@@ -68,7 +63,6 @@ export async function loadFollowersFromCSV(): Promise<FollowerData[]> {
         profilePicUrl = `https://images.pexels.com/photos/${imageId}/pexels-photo-${imageId}.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=100&h=100&fit=crop`;
       }
 
-      // === your existing numeric / engagement / lead scoring ===
       const followerCount = parseInt(row['follower_count']) || 0;
       const followingCount = parseInt(row['following_count']) || 0;
       const postsCount    = parseInt(row['posts_count'])    || 0;
@@ -96,7 +90,6 @@ export async function loadFollowersFromCSV(): Promise<FollowerData[]> {
       if (leadScore >= 70 && followerCount > 50000)      potentialValue = 'High';
       else if (leadScore >= 50 || followerCount > 20000) potentialValue = 'Medium';
 
-      // === assemble final object ===
       return {
         id:            i + 1,
         username:      row.username || `@user${i + 1}`,
@@ -135,71 +128,11 @@ function hashCode(str: string): number {
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
   return hash;
 }
 
-function extractLocation(bio: string): string | null {
-  if (!bio) return null;
-  
-  // Common location patterns in bios
-  const locationPatterns = [
-    /📍\s*([^|•\n]+)/i,
-    /based in\s+([^|•\n]+)/i,
-    /from\s+([^|•\n]+)/i,
-    /living in\s+([^|•\n]+)/i,
-    /(\w+,\s*\w+)/i // City, State pattern
-  ];
-  
-  for (const pattern of locationPatterns) {
-    const match = bio.match(pattern);
-    if (match) {
-      return match[1].trim();
-    }
-  }
-  
-  return null;
-}
-
-function getRandomLocation(): string {
-  const locations = [
-    'New York, NY', 'Los Angeles, CA', 'Chicago, IL', 'Houston, TX', 'Phoenix, AZ',
-    'Philadelphia, PA', 'San Antonio, TX', 'San Diego, CA', 'Dallas, TX', 'San Jose, CA',
-    'Austin, TX', 'Jacksonville, FL', 'Fort Worth, TX', 'Columbus, OH', 'Charlotte, NC',
-    'San Francisco, CA', 'Indianapolis, IN', 'Seattle, WA', 'Denver, CO', 'Washington, DC',
-    'Boston, MA', 'El Paso, TX', 'Nashville, TN', 'Detroit, MI', 'Oklahoma City, OK',
-    'Portland, OR', 'Las Vegas, NV', 'Memphis, TN', 'Louisville, KY', 'Baltimore, MD',
-    'Milwaukee, WI', 'Albuquerque, NM', 'Tucson, AZ', 'Fresno, CA', 'Sacramento, CA',
-    'Mesa, AZ', 'Kansas City, MO', 'Atlanta, GA', 'Long Beach, CA', 'Colorado Springs, CO',
-    'Raleigh, NC', 'Miami, FL', 'Virginia Beach, VA', 'Omaha, NE', 'Oakland, CA',
-    'Minneapolis, MN', 'Tulsa, OK', 'Arlington, TX', 'Tampa, FL', 'New Orleans, LA'
-  ];
-  return locations[Math.floor(Math.random() * locations.length)];
-}
-
-function generateEmail(username: string): string {
-  const cleanUsername = username.replace('@', '').replace(/[^a-zA-Z0-9]/g, '');
-  const domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com'];
-  const domain = domains[Math.floor(Math.random() * domains.length)];
-  return `${cleanUsername}@${domain}`;
-}
-
-function generatePhoneNumber(): string {
-  const areaCode = Math.floor(Math.random() * 900) + 100;
-  const exchange = Math.floor(Math.random() * 900) + 100;
-  const number = Math.floor(Math.random() * 9000) + 1000;
-  return `+1 (${areaCode}) ${exchange}-${number}`;
-}
-
-function getRandomActivity(): string {
-  const activities = [
-    '2 hours ago', '5 hours ago', '8 hours ago', '12 hours ago', '1 day ago', 
-    '2 days ago', '3 days ago', '5 days ago', '1 week ago', '2 weeks ago', 
-    '3 weeks ago', '1 month ago', '6 weeks ago', '2 months ago'
-  ];
-  return activities[Math.floor(Math.random() * activities.length)];
-}
 
 function getRandomDate(): string {
   const start = new Date(2024, 0, 1);

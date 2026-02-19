@@ -1,11 +1,7 @@
-// components/DashboardLayout.jsx
 import { useState } from 'react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Dashboard } from './Dashboard';
 import { FollowersView } from './FollowersView';
-import { CommunicationView } from './CommunicationView';
-import { ContactsView } from './ContactsView';
-import { AnalyticsView } from './AnalyticsView';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { Toaster } from '@/components/ui/sonner';
@@ -25,15 +21,6 @@ export function DashboardLayout({ initialTab = 'dashboard' }) {
             </TabsContent>
             <TabsContent value="followers" className="mt-0">
               <FollowersView />
-            </TabsContent>
-            <TabsContent value="communication" className="mt-0">
-              <CommunicationView />
-            </TabsContent>
-            <TabsContent value="contacts" className="mt-0">
-              <ContactsView />
-            </TabsContent>
-            <TabsContent value="analytics" className="mt-0">
-              <AnalyticsView />
             </TabsContent>
           </Tabs>
         </main>

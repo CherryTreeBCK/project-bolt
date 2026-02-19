@@ -1,8 +1,7 @@
 import { supabase } from '../lib/supabase.ts';
 
-/** Initialize database - no longer needed with Supabase */
+
 export async function initDB() {
-  // Check if we can connect to Supabase
   const { data, error } = await supabase.from('accounts').select('count').limit(1);
   if (error) {
     console.error('Supabase connection error:', error);
@@ -12,7 +11,6 @@ export async function initDB() {
   return true;
 }
 
-/** Get all accounts */
 export async function getAllAccounts() {
   const { data, error } = await supabase
     .from('accounts')
@@ -27,7 +25,6 @@ export async function getAllAccounts() {
   return data || [];
 }
 
-/** Upsert the parent IG account */
 export async function upsertAccount({ id, username, full_name, profile_image_url }) {
   const { data, error } = await supabase
     .from('accounts')
@@ -47,7 +44,6 @@ export async function upsertAccount({ id, username, full_name, profile_image_url
   return data;
 }
 
-/** Update account ID and move all associated followers */
 export async function updateAccountId(oldId, newId) {
   const { error: accountError } = await supabase
     .from('accounts')
@@ -72,12 +68,10 @@ export async function updateAccountId(oldId, newId) {
   console.log(`Updated account ID from ${oldId} to ${newId}`);
 }
 
-/** Bulk-import followers CSV for a given account_id */
 export async function importFollowers(account_id, file) {
   const Papa = await import("papaparse");
   const { data } = Papa.parse(await file.text(), { header: true, skipEmptyLines: true });
 
-  // Delete existing followers for this account
   const { error: deleteError } = await supabase
     .from('followers')
     .delete()
@@ -88,7 +82,6 @@ export async function importFollowers(account_id, file) {
     throw deleteError;
   }
 
-  // Prepare followers data
   const followersData = data.map(r => ({
     id: parseInt(r["ID"]) || Math.floor(Math.random() * 1000000000),
     account_id,
@@ -106,7 +99,6 @@ export async function importFollowers(account_id, file) {
     profile_image_url: r["profile image url"] || ""
   }));
 
-  // Insert followers in batches (Supabase has a limit on batch size)
   const batchSize = 1000;
   let insertedCount = 0;
 
@@ -153,7 +145,6 @@ export async function followersByAccount(account_id) {
     throw error;
   }
 
-  // Flatten the contact data
   const followersWithContacts = (data || []).map(follower => ({
     ...follower,
     status: follower.contacts?.status || null,
@@ -191,7 +182,6 @@ export async function getFollowerWithContact(follower_id) {
 
   if (!data) return null;
 
-  // Flatten the contact data
   return {
     ...data,
     status: data.contacts?.status || null,
@@ -241,7 +231,6 @@ export async function searchFollowers(account_id, query) {
     throw error;
   }
 
-  // Flatten the contact data
   return (data || []).map(follower => ({
     ...follower,
     status: follower.contacts?.status || null,
@@ -251,30 +240,28 @@ export async function searchFollowers(account_id, query) {
   }));
 }
 
-/** Validate and use a signup token */
 export async function validateSignupToken(token) {
-  try {
-    const { data, error } = await supabase
-      .from('account_access_tokens')
-      .select('account_id, accounts(username)')
-      .eq('token', token)
-      .eq('used', false)
-      .gt('expires_at', new Date().toISOString())
-      .single();
+  const { data, error } = await supabase
+    .from("account_access_tokens")
+    .select("id, account_id, token, used, expires_at")
+    .eq("token", token)
+    .eq("used", false)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();  
 
-    if (error) {
-      console.error('Error validating token:', error);
-      return null;
-    }
-
-    return data;
-  } catch (error) {
-    console.error('Error validating token:', error);
+  if (error) {
+    console.error("Token validation error:", error);
     return null;
   }
+
+  if (!data) return null;
+
+  return {
+    accountUUID: data.id,        
+    username: data.account_id,   
+  };
 }
 
-/** Mark token as used */
 export async function markTokenAsUsed(token) {
   const { error } = await supabase
     .from('account_access_tokens')
@@ -288,7 +275,6 @@ export async function markTokenAsUsed(token) {
 }
 
 export async function exportDatabase() {
-  // Export all data as JSON since we can't export SQLite from Supabase
   try {
     const [accountsResult, followersResult, contactsResult] = await Promise.all([
       supabase.from('accounts').select('*'),
@@ -317,7 +303,7 @@ export async function exportDatabase() {
     throw error;
   }
 }
-/** Generate a signup token for an account */
+
 export async function generateAccountToken(accountId) {
   const { data, error } = await supabase
     .rpc('generate_account_token', { p_account_id: accountId });
@@ -330,7 +316,6 @@ export async function generateAccountToken(accountId) {
   return data;
 }
 
-/** Get account tokens */
 export async function getAccountTokens(accountId) {
   const { data, error } = await supabase
     .from('account_access_tokens')

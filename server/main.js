@@ -14,7 +14,7 @@ export async function runAllTasks(progressCallback) {
     await classifyFollowers(progressCallback);
 
     progressCallback?.({ status: 'Exporting followers to CSV...', progress: 0 });
-    await exportTableToCSV('followers_duplicate');
+    await exportTableToCSV('followers_duplicate_new');
 
     progressCallback?.({ status: 'All tasks completed!', progress: 1, done: true });
   } catch (error) {
